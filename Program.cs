@@ -85,6 +85,22 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    var targetUser = db.Users.FirstOrDefault(u => u.Username == "ADMIN123");
+    if (targetUser is not null && !targetUser.IsAdmin)
+    {
+        targetUser.IsAdmin = true;
+        db.SaveChanges();
+        Console.WriteLine($"✅ Set '{targetUser.Username}' as admin.");
+    }
+    else if (targetUser is null)
+    {
+        Console.WriteLine("⚠️ User not found. Check the username.");
+    }
+}
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
