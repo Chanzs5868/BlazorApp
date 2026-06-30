@@ -13,8 +13,26 @@ builder.Services.AddRazorComponents()
 
 builder.Services.AddControllers();
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=app.db"));
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (!string.IsNullOrEmpty(databaseUrl))
+{
+    // 生产环境(Railway):用 PostgreSQL
+    // Railway 给的 DATABASE_URL 格式是 postgres://user:pass@host:port/dbname
+    // Npgsql 需要转换成标准连接字符串格式
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+    var npgsqlConnectionString = $"Host={uri.Host};Port={uri.Port};Database={uri.AbsolutePath.TrimStart('/')};Username={userInfo[0]};Password={userInfo[1]};SSL Mode=Require;Trust Server Certificate=true";
+
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(npgsqlConnectionString));
+}
+else
+{
+    // 本地开发环境:继续用 SQLite
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlite("Data Source=app.db"));
+}
 
 builder.Services.AddScoped<ProductService>();
 builder.Services.AddScoped<UserService>();
@@ -55,7 +73,16 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.Migrate();
+    if (!string.IsNullOrEmpty(databaseUrl))
+    {
+        // 生产环境(PostgreSQL):用正式迁移
+        db.Database.Migrate();
+    }
+    else
+    {
+        // 本地开发(SQLite):直接根据模型建表,不走迁移历史
+        db.Database.EnsureCreated();
+    }
 }
 
 if (!app.Environment.IsDevelopment())
